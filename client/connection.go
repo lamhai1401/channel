@@ -3,13 +3,15 @@ package client
 import (
 	"errors"
 	"fmt"
+	"net"
 	"net/url"
 	"path"
 	"sync"
 	"time"
 
+	"github.com/gorilla/websocket"
+	"github.com/lamhai1401/gologs/logs"
 	"golang.org/x/net/context"
-	"golang.org/x/net/websocket"
 )
 
 const VSN = "1.0.0"
@@ -25,12 +27,13 @@ type Connection struct {
 	ctx    context.Context
 	cancel func()
 
-	sock   Socket
-	ref    refMaker
-	center *regCenter
-	msgs   chan *Message
-
-	status string
+	sock     Socket
+	ref      refMaker
+	center   *regCenter
+	msgs     chan *Message
+	isClosed bool // check close
+	mutex    sync.RWMutex
+	status   string
 }
 
 func Connect(_url string, args url.Values) (*Connection, error) {
@@ -41,7 +44,7 @@ func Connect(_url string, args url.Values) (*Connection, error) {
 	}
 
 	if !surl.IsAbs() {
-		return nil, errors.New("URL should be absolute.")
+		return nil, errors.New("url should be absolute.")
 	}
 
 	oscheme := surl.Scheme
@@ -51,24 +54,44 @@ func Connect(_url string, args url.Values) (*Connection, error) {
 	case "https":
 		surl.Scheme = "wss"
 	default:
-		return nil, errors.New("Schema should be http or https.")
+		return nil, errors.New("schema should be http or https.")
 	}
 
 	surl.Path = path.Join(surl.Path, "websocket")
 	surl.RawQuery = args.Encode()
 
-	originURL := fmt.Sprintf("%s://%s", oscheme, surl.Host)
+	// originURL := fmt.Sprintf("%s://%s", oscheme, surl.Host)
 	socketURL := surl.String()
 
-	wconn, err := websocket.Dial(socketURL, "", originURL)
-	if err != nil {
-		return nil, err
+	// wconn, err := websocket.Dial(socketURL, "", originURL)
+	// if err != nil {
+	// 	return nil, err
+	// }
+
+	var wsConn *websocket.Conn
+	for {
+		ctx, cancel := context.WithTimeout(context.Background(), time.Duration(getTimeout())*time.Second)
+		defer cancel()
+		wsConn, _, err = websocket.DefaultDialer.DialContext(ctx, socketURL, nil)
+		if err != nil {
+			if isTimeoutError(err) {
+				logs.Warn("*** Connection timeout. Try to reconnect")
+				wsConn = nil
+				err = nil
+				ctx = nil
+				continue
+			} else {
+				return nil, err
+			}
+		} else {
+			break
+		}
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	conn := &Connection{
 		ctx:    ctx,
 		cancel: cancel,
-		sock:   &WSocket{conn: wconn},
+		sock:   &WSocket{conn: wsConn},
 		center: newRegCenter(),
 		msgs:   make(chan *Message),
 		status: ConnOpen,
@@ -77,6 +100,11 @@ func Connect(_url string, args url.Values) (*Connection, error) {
 	conn.start()
 
 	return conn, nil
+}
+
+func isTimeoutError(err error) bool {
+	e, ok := err.(net.Error)
+	return ok && e.Timeout()
 }
 
 const all = ""
@@ -147,6 +175,7 @@ func (conn *Connection) start() {
 }
 
 func (conn *Connection) Close() error {
+	conn.setClose(true)
 	conn.cancel()
 	return conn.sock.Close()
 }
@@ -192,4 +221,16 @@ func (conn *Connection) dispatch(msg *Message) {
 	go conn.pushToChans(&wg, conn.center.getPullers(toKey(msg.Topic, msg.Event, "")), msg)
 	go conn.pushToChans(&wg, conn.center.getPullers(toKey("", "", msg.Ref)), msg)
 	wg.Wait()
+}
+
+func (conn *Connection) checkClose() bool {
+	conn.mutex.RLock()
+	defer conn.mutex.RUnlock()
+	return conn.isClosed
+}
+
+func (conn *Connection) setClose(state bool) {
+	conn.mutex.Lock()
+	defer conn.mutex.Unlock()
+	conn.isClosed = state
 }
