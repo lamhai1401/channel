@@ -79,8 +79,9 @@ func (ws *WSocket) Recv() (*Message, error) {
 
 		err = json.Unmarshal(resp, &msg)
 		if err != nil {
-			return nil, fmt.Errorf("Signaler Unmarshal err: %v", err)
+			return nil, fmt.Errorf("signaler Unmarshal err: %v", err)
 		}
+		return msg, nil
 	}
 	return msg, fmt.Errorf("current connection is nil")
 	// return msg, websocket.JSON.Receive(ws.conn, msg)
