@@ -84,7 +84,6 @@ func (ws *WSocket) Recv() (*Message, error) {
 		return msg, nil
 	}
 	return msg, fmt.Errorf("current connection is nil")
-	// return msg, websocket.JSON.Receive(ws.conn, msg)
 }
 
 func (ws *WSocket) getConn() *websocket.Conn {

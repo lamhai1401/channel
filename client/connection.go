@@ -44,24 +44,28 @@ func Connect(_url string, args url.Values) (*Connection, error) {
 	}
 
 	if !surl.IsAbs() {
-		return nil, errors.New("url should be absolute.")
+		return nil, errors.New("url should be absolute")
 	}
 
 	oscheme := surl.Scheme
 	switch oscheme {
+	case "ws":
+		break
+	case "wss":
+		break
 	case "http":
 		surl.Scheme = "ws"
 	case "https":
 		surl.Scheme = "wss"
 	default:
-		return nil, errors.New("schema should be http or https.")
+		return nil, errors.New("schema should be http or https")
 	}
 
 	surl.Path = path.Join(surl.Path, "websocket")
 	surl.RawQuery = args.Encode()
 
-	// originURL := fmt.Sprintf("%s://%s", oscheme, surl.Host)
-	socketURL := surl.String()
+	originURL := fmt.Sprintf("%s://%s", surl.Scheme, surl.Host)
+	// socketURL := surl.String()
 
 	// wconn, err := websocket.Dial(socketURL, "", originURL)
 	// if err != nil {
@@ -72,7 +76,7 @@ func Connect(_url string, args url.Values) (*Connection, error) {
 	for {
 		ctx, cancel := context.WithTimeout(context.Background(), time.Duration(getTimeout())*time.Second)
 		defer cancel()
-		wsConn, _, err = websocket.DefaultDialer.DialContext(ctx, socketURL, nil)
+		wsConn, _, err = websocket.DefaultDialer.DialContext(ctx, originURL, nil)
 		if err != nil {
 			if isTimeoutError(err) {
 				logs.Warn("*** Connection timeout. Try to reconnect")
