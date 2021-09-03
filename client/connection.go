@@ -64,9 +64,10 @@ func Connect(_url string, args url.Values) (*Connection, error) {
 	surl.Path = path.Join(surl.Path, "websocket")
 	surl.RawQuery = args.Encode()
 
-	originURL := fmt.Sprintf("%s://%s", surl.Scheme, surl.Host)
+	// originURL := fmt.Sprintf("%s://%s", surl.Scheme, surl.Host)
+	originURL := fmt.Sprintf("%s://%s%s?%s", surl.Scheme, surl.Host, surl.Path, surl.RawQuery)
 	// socketURL := surl.String()
-
+	// fmt.Println(socketURL==originURL)
 	// wconn, err := websocket.Dial(socketURL, "", originURL)
 	// if err != nil {
 	// 	return nil, err
