@@ -101,3 +101,18 @@ func (ch *Chan) Push(evt string, payload interface{}) error {
 	}
 	return ch.conn.push(msg)
 }
+
+// Push send a msg to channel
+func (ch *Chan) PushWithRef(ref, evt *string, payload interface{}) error {
+	msg := &Message{
+		Topic:   ch.topic,
+		Event:   *evt,
+		Ref:     *ref,
+		Payload: payload,
+	}
+	return ch.conn.push(msg)
+}
+
+func (ch *Chan) GetRef() string {
+	return ch.conn.ref.makeRef()
+}
