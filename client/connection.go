@@ -98,7 +98,7 @@ func Connect(_url string, args url.Values) (*Connection, error) {
 		cancel: cancel,
 		sock:   &WSocket{conn: wsConn},
 		center: newRegCenter(),
-		msgs:   make(chan *Message),
+		msgs:   make(chan *Message, 1000),
 		status: ConnOpen,
 	}
 
