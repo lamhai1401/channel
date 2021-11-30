@@ -1,7 +1,6 @@
 package client
 
 import (
-	"encoding/json"
 	"fmt"
 	"os"
 	"strconv"
@@ -37,18 +36,24 @@ type WSocket struct {
 func (ws *WSocket) Send(msg *Message) error {
 	// return websocket.JSON.Send(ws.conn, msg)
 	if conn := ws.getConn(); conn != nil {
-		if err := conn.SetWriteDeadline(time.Now().Add(writeWait)); err != nil {
-			return err
-		}
 		ws.mutex.Lock()
 		defer ws.mutex.Unlock()
 
 		// marshal msg
-		result, err := json.Marshal(msg)
-		if err != nil {
+		// result, err := json.Marshal(msg)
+		// if err != nil {
+		// 	return err
+		// }
+
+		if err := conn.SetWriteDeadline(time.Now().Add(writeWait)); err != nil {
 			return err
 		}
-		if err := conn.WriteMessage(websocket.TextMessage, result); err != nil {
+
+		// if err := conn.WriteMessage(websocket.TextMessage, result); err != nil {
+		// 	return err
+		// }
+
+		if err := conn.WriteJSON(msg); err != nil {
 			return err
 		}
 		return nil
@@ -65,7 +70,8 @@ func (ws *WSocket) Close() error {
 func (ws *WSocket) Recv() (*Message, error) {
 	var msg *Message
 	if conn := ws.getConn(); conn != nil {
-		_, resp, err := conn.ReadMessage()
+		// _, resp, err := conn.ReadMessage()
+		err := conn.ReadJSON(&msg)
 		if err != nil {
 			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway) {
 				return nil, fmt.Errorf("websocket closeGoingAway error: %v", err)
@@ -73,11 +79,12 @@ func (ws *WSocket) Recv() (*Message, error) {
 			return nil, fmt.Errorf("recv err: %v", err)
 		}
 
-		if len(resp) == 0 {
-			return msg, nil
-		}
+		// if len(resp) == 0 {
+		// 	return msg, nil
+		// }
 
-		err = json.Unmarshal(resp, &msg)
+		// err = json.Unmarshal(resp, &msg)
+
 		if err != nil {
 			return nil, fmt.Errorf("signaler Unmarshal err: %v", err)
 		}
