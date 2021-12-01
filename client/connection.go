@@ -9,7 +9,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/gorilla/websocket"
+	"github.com/gobwas/ws"
 	"github.com/lamhai1401/gologs/logs"
 	"golang.org/x/net/context"
 )
@@ -73,11 +73,12 @@ func Connect(_url string, args url.Values) (*Connection, error) {
 	// 	return nil, err
 	// }
 
-	var wsConn *websocket.Conn
+	var wsConn net.Conn
 	for {
 		ctx, cancel := context.WithTimeout(context.Background(), time.Duration(getTimeout())*time.Second)
 		defer cancel()
-		wsConn, _, err = websocket.DefaultDialer.DialContext(ctx, originURL, nil)
+		// wsConn, _, err = websocket.DefaultDialer.DialContext(ctx, originURL, nil)
+		wsConn, _, _, err = ws.DefaultDialer.Dial(ctx, originURL)
 		if err != nil {
 			if isTimeoutError(err) {
 				logs.Warn("*** Connection timeout. Try to reconnect")

@@ -1,13 +1,16 @@
 package client
 
 import (
+	"encoding/json"
 	"fmt"
+	"net"
 	"os"
 	"strconv"
 	"sync"
 	"time"
 
-	"github.com/gorilla/websocket"
+	websocket "github.com/gobwas/ws"
+	"github.com/gobwas/ws/wsutil"
 )
 
 // Wss constant
@@ -28,32 +31,30 @@ type Socket interface {
 
 // WSocket Socket implementation for web socket
 type WSocket struct {
-	conn  *websocket.Conn
+	conn  net.Conn
 	mutex sync.RWMutex
 }
 
 // Send implments Socket.Send
 func (ws *WSocket) Send(msg *Message) error {
-	// return websocket.JSON.Send(ws.conn, msg)
 	if conn := ws.getConn(); conn != nil {
-		ws.mutex.Lock()
-		defer ws.mutex.Unlock()
+		// ws.mutex.Lock()
+		// defer ws.mutex.Unlock()
 
 		// marshal msg
 		// result, err := json.Marshal(msg)
 		// if err != nil {
 		// 	return err
 		// }
-
+		bin, err := json.Marshal(msg)
+		if err != nil {
+			return err
+		}
 		if err := conn.SetWriteDeadline(time.Now().Add(writeWait)); err != nil {
 			return err
 		}
-
-		// if err := conn.WriteMessage(websocket.TextMessage, result); err != nil {
-		// 	return err
-		// }
-
-		if err := conn.WriteJSON(msg); err != nil {
+		err = wsutil.WriteClientMessage(conn, websocket.OpText, bin)
+		if err != nil {
 			return err
 		}
 		return nil
@@ -70,30 +71,20 @@ func (ws *WSocket) Close() error {
 func (ws *WSocket) Recv() (*Message, error) {
 	var msg *Message
 	if conn := ws.getConn(); conn != nil {
-		// _, resp, err := conn.ReadMessage()
-		err := conn.ReadJSON(&msg)
+		data, _, err := wsutil.ReadServerData(conn)
 		if err != nil {
-			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway) {
-				return nil, fmt.Errorf("websocket closeGoingAway error: %v", err)
-			}
-			return nil, fmt.Errorf("recv err: %v", err)
+			return nil, err
 		}
-
-		// if len(resp) == 0 {
-		// 	return msg, nil
-		// }
-
-		// err = json.Unmarshal(resp, &msg)
-
+		err = json.Unmarshal(data, &msg)
 		if err != nil {
-			return nil, fmt.Errorf("signaler Unmarshal err: %v", err)
+			return nil, err
 		}
 		return msg, nil
 	}
 	return msg, fmt.Errorf("current connection is nil")
 }
 
-func (ws *WSocket) getConn() *websocket.Conn {
+func (ws *WSocket) getConn() net.Conn {
 	ws.mutex.RLock()
 	defer ws.mutex.RUnlock()
 	return ws.conn
