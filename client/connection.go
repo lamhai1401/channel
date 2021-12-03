@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"net/http"
 	"net/url"
 	"path"
 	"sync"
@@ -14,6 +15,8 @@ import (
 	"golang.org/x/net/context"
 )
 
+const maxMimumReadBuffer = 1024 * 1024 * 2
+const maxMimumWriteBuffer = 1024 * 1024 * 2
 const VSN = "1.0.0"
 
 const (
@@ -74,10 +77,20 @@ func Connect(_url string, args url.Values) (*Connection, error) {
 	// }
 
 	var wsConn *websocket.Conn
+
 	for {
 		ctx, cancel := context.WithTimeout(context.Background(), time.Duration(getTimeout())*time.Second)
 		defer cancel()
-		wsConn, _, err = websocket.DefaultDialer.DialContext(ctx, originURL, nil)
+
+		dialer := websocket.Dialer{
+			Proxy:             http.ProxyFromEnvironment,
+			HandshakeTimeout:  30 * time.Second,
+			EnableCompression: true,
+			ReadBufferSize:    maxMimumReadBuffer,
+			WriteBufferSize:   maxMimumWriteBuffer,
+		}
+
+		wsConn, _, err = dialer.DialContext(ctx, originURL, nil)
 		if err != nil {
 			if isTimeoutError(err) {
 				logs.Warn("*** Connection timeout. Try to reconnect")
@@ -92,6 +105,12 @@ func Connect(_url string, args url.Values) (*Connection, error) {
 			break
 		}
 	}
+
+	err = wsConn.SetCompressionLevel(6)
+	if err != nil {
+		return nil, err
+	}
+
 	ctx, cancel := context.WithCancel(context.Background())
 	conn := &Connection{
 		ctx:    ctx,
