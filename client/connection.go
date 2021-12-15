@@ -111,6 +111,8 @@ func Connect(_url string, args url.Values) (*Connection, error) {
 		return nil, err
 	}
 
+	wsConn.EnableWriteCompression(true)
+
 	ctx, cancel := context.WithCancel(context.Background())
 	conn := &Connection{
 		ctx:    ctx,
