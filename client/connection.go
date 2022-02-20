@@ -167,9 +167,9 @@ func (conn *Connection) pullLoop() {
 		msg, err := conn.sock.Recv()
 		if err != nil {
 			conn.msgs <- nil
-			fmt.Printf("%s\n", err)
+			logs.Error(fmt.Sprintf("%s\n", err))
 			close(conn.msgs)
-			conn.closeAllPullers()
+			conn.closeAllPullers() // TODO fix here
 			return
 		}
 		select {
@@ -214,10 +214,13 @@ func (conn *Connection) pushToChan(puller *Puller, msg *Message) {
 }
 
 func (conn *Connection) pushToChans(wg *sync.WaitGroup, pullers []*Puller, msg *Message) {
+	defer wg.Done()
+	if len(pullers) == 0 {
+		return
+	}
 	for _, puller := range pullers {
 		go conn.pushToChan(puller, msg)
 	}
-	wg.Done()
 }
 
 func (conn *Connection) closePullers(pullers []*Puller) {
@@ -227,15 +230,14 @@ func (conn *Connection) closePullers(pullers []*Puller) {
 }
 
 func (conn *Connection) closeAllPullers() {
-
 	conn.center.RLock()
-	defer conn.center.RUnlock()
-
-	for _, pullers := range conn.center.regs {
-		for _, puller := range pullers {
-			close(puller.ch)
-		}
+	for id, pullers := range conn.center.regs {
+		delete(conn.center.regs, id)
+		defer func(pls []*Puller) {
+			conn.closePullers(pls)
+		}(pullers)
 	}
+	conn.center.RUnlock()
 
 }
 
