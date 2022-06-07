@@ -35,7 +35,7 @@ type Connection struct {
 	center   *regCenter
 	msgs     chan *Message
 	isClosed bool // check close
-	mutex    sync.RWMutex
+	mutex    sync.Mutex
 	status   string
 }
 
@@ -206,7 +206,21 @@ func (conn *Connection) Close() error {
 	return conn.sock.Close()
 }
 
+// Handlepanic prevent panic
+func handlepanic(data ...interface{}) {
+	if a := recover(); a != nil {
+		// spew.Println("===========This data make signal panic==============")
+		// spew.Dump(data...)
+		fmt.Println("pushToChan RECOVER", a, data)
+	}
+}
+
 func (conn *Connection) pushToChan(puller *Puller, msg *Message) {
+	defer handlepanic(puller.key, msg)
+	if puller.isChannClosed() {
+		return
+	}
+
 	select {
 	case puller.ch <- msg:
 	case <-time.After(10 * time.Millisecond):
@@ -225,19 +239,29 @@ func (conn *Connection) pushToChans(wg *sync.WaitGroup, pullers []*Puller, msg *
 
 func (conn *Connection) closePullers(pullers []*Puller) {
 	for _, puller := range pullers {
-		close(puller.ch)
+		if !puller.isChannClosed() {
+			puller.closeChann()
+		}
+		// close(puller.ch)
 	}
 }
 
 func (conn *Connection) closeAllPullers() {
-	conn.center.RLock()
+	temp := make([][]*Puller, 0)
+
+	defer func() {
+		time.Sleep(2 * time.Second)
+		for _, pull := range temp {
+			conn.closePullers(pull)
+		}
+	}()
+	conn.center.Lock()
 	for id, pullers := range conn.center.regs {
 		delete(conn.center.regs, id)
-		defer func(pls []*Puller) {
-			conn.closePullers(pls)
-		}(pullers)
+		temp = append(temp, pullers)
+
 	}
-	conn.center.RUnlock()
+	conn.center.Unlock()
 
 }
 
@@ -252,8 +276,8 @@ func (conn *Connection) dispatch(msg *Message) {
 }
 
 func (conn *Connection) checkClose() bool {
-	conn.mutex.RLock()
-	defer conn.mutex.RUnlock()
+	conn.mutex.Lock()
+	defer conn.mutex.Unlock()
 	return conn.isClosed
 }
 

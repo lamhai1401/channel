@@ -6,7 +6,7 @@ import (
 )
 
 type regCenter struct {
-	sync.RWMutex
+	sync.Mutex
 	regs map[string][]*Puller
 }
 
@@ -51,8 +51,8 @@ func (center *regCenter) unregister(puller *Puller) {
 }
 
 func (center *regCenter) getPullers(key string) []*Puller {
-	center.RLock()
-	defer center.RUnlock()
+	center.Lock()
+	defer center.Unlock()
 
 	pullers := center.regs[key]
 	copied := make([]*Puller, len(pullers))
